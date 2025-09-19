@@ -9,14 +9,12 @@ terraform {
 }
 
 provider "aws" {
-  region = var.aws_region
+  region = "eu-central-1"
 }
 
 # ----------------------
 # Variabelen
 # ----------------------
-variable "aws_region" { default = "eu-west-1" }
-
 variable "web1_name" { default = "web1" }
 variable "web2_name" { default = "web2" }
 variable "db_name"   { default = "database" }
@@ -26,7 +24,7 @@ variable "web2_ip" { default = "10.0.1.11" }
 variable "db_ip"   { default = "10.0.1.20" }
 
 # ----------------------
-# Gebruik de default VPC
+# Default VPC gebruiken
 # ----------------------
 data "aws_vpc" "default" {
   default = true
@@ -37,7 +35,7 @@ data "aws_subnet_ids" "default" {
 }
 
 # ----------------------
-# Haal laatste Amazon Linux 2 AMI op
+# Laatste Amazon Linux 2 AMI
 # ----------------------
 data "aws_ami" "amazon_linux_2" {
   most_recent = true
@@ -93,28 +91,28 @@ resource "aws_security_group" "db_sg" {
 # EC2 Instances
 # ----------------------
 resource "aws_instance" "web1" {
-  ami           = data.aws_ami.amazon_linux_2.id
-  instance_type = "t2.micro"
-  subnet_id     = data.aws_subnet_ids.default.ids[0]
-  private_ip    = var.web1_ip
+  ami             = data.aws_ami.amazon_linux_2.id
+  instance_type   = "t2.micro"
+  subnet_id       = data.aws_subnet_ids.default.ids[0]
+  private_ip      = var.web1_ip
   security_groups = [aws_security_group.web_sg.name]
   tags = { Name = var.web1_name }
 }
 
 resource "aws_instance" "web2" {
-  ami           = data.aws_ami.amazon_linux_2.id
-  instance_type = "t2.micro"
-  subnet_id     = data.aws_subnet_ids.default.ids[0]
-  private_ip    = var.web2_ip
+  ami             = data.aws_ami.amazon_linux_2.id
+  instance_type   = "t2.micro"
+  subnet_id       = data.aws_subnet_ids.default.ids[0]
+  private_ip      = var.web2_ip
   security_groups = [aws_security_group.web_sg.name]
   tags = { Name = var.web2_name }
 }
 
 resource "aws_instance" "db" {
-  ami           = data.aws_ami.amazon_linux_2.id
-  instance_type = "t2.micro"
-  subnet_id     = data.aws_subnet_ids.default.ids[0]
-  private_ip    = var.db_ip
+  ami             = data.aws_ami.amazon_linux_2.id
+  instance_type   = "t2.micro"
+  subnet_id       = data.aws_subnet_ids.default.ids[0]
+  private_ip      = var.db_ip
   security_groups = [aws_security_group.db_sg.name]
   tags = { Name = var.db_name }
 }
