@@ -9,40 +9,39 @@ terraform {
 }
 
 provider "aws" {
-  region = "eu-central-1"
+  region = var.aws_region
 }
 
 # ----------------------
 # Variabelen
 # ----------------------
+variable "aws_region" {
+  description = "AWS regio waarin de resources komen"
+  type        = string
+  default     = "eu-west-1"
+}
+
+# Namen van servers
 variable "web1_name" { default = "web1" }
 variable "web2_name" { default = "web2" }
 variable "db_name"   { default = "database" }
 
+# IP adressen van servers
 variable "web1_ip" { default = "10.0.1.10" }
 variable "web2_ip" { default = "10.0.1.11" }
 variable "db_ip"   { default = "10.0.1.20" }
 
 # ----------------------
-# Default VPC gebruiken
+# Default VPC en Subnets
 # ----------------------
 data "aws_vpc" "default" {
   default = true
 }
 
-data "aws_subnet_ids" "default" {
-  vpc_id = data.aws_vpc.default.id
-}
-
-# ----------------------
-# Laatste Amazon Linux 2 AMI
-# ----------------------
-data "aws_ami" "amazon_linux_2" {
-  most_recent = true
-  owners      = ["amazon"]
+data "aws_subnets" "default_vpc_subnets" {
   filter {
-    name   = "name"
-    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
   }
 }
 
@@ -88,31 +87,47 @@ resource "aws_security_group" "db_sg" {
 }
 
 # ----------------------
-# EC2 Instances
+# Dynamische Amazon Linux 2 AMI ophalen
+# ----------------------
+data "aws_ami" "amazon_linux" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+  }
+}
+
+# ----------------------
+# Webservers
 # ----------------------
 resource "aws_instance" "web1" {
-  ami             = data.aws_ami.amazon_linux_2.id
+  ami             = data.aws_ami.amazon_linux.id
   instance_type   = "t2.micro"
-  subnet_id       = data.aws_subnet_ids.default.ids[0]
   private_ip      = var.web1_ip
+  subnet_id       = data.aws_subnets.default_vpc_subnets.ids[0]
   security_groups = [aws_security_group.web_sg.name]
   tags = { Name = var.web1_name }
 }
 
 resource "aws_instance" "web2" {
-  ami             = data.aws_ami.amazon_linux_2.id
+  ami             = data.aws_ami.amazon_linux.id
   instance_type   = "t2.micro"
-  subnet_id       = data.aws_subnet_ids.default.ids[0]
   private_ip      = var.web2_ip
+  subnet_id       = data.aws_subnets.default_vpc_subnets.ids[0]
   security_groups = [aws_security_group.web_sg.name]
   tags = { Name = var.web2_name }
 }
 
+# ----------------------
+# Database
+# ----------------------
 resource "aws_instance" "db" {
-  ami             = data.aws_ami.amazon_linux_2.id
+  ami             = data.aws_ami.amazon_linux.id
   instance_type   = "t2.micro"
-  subnet_id       = data.aws_subnet_ids.default.ids[0]
   private_ip      = var.db_ip
+  subnet_id       = data.aws_subnets.default_vpc_subnets.ids[0]
   security_groups = [aws_security_group.db_sg.name]
   tags = { Name = var.db_name }
 }
