@@ -32,17 +32,18 @@ variable "web2_ip" { default = "10.0.1.11" }
 variable "db_ip"   { default = "10.0.1.20" }
 
 # ----------------------
-# Default VPC en Subnets
+# VPC en Subnet
 # ----------------------
-data "aws_vpc" "default" {
-  default = true
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+  tags = { Name = "main-vpc" }
 }
 
-data "aws_subnets" "default_vpc_subnets" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
-  }
+resource "aws_subnet" "main_subnet" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = "${var.aws_region}a"
+  tags = { Name = "main-subnet" }
 }
 
 # ----------------------
@@ -50,7 +51,7 @@ data "aws_subnets" "default_vpc_subnets" {
 # ----------------------
 resource "aws_security_group" "web_sg" {
   name   = "web-sg"
-  vpc_id = data.aws_vpc.default.id
+  vpc_id = aws_vpc.main.id
 
   ingress {
     from_port   = 80
@@ -69,7 +70,7 @@ resource "aws_security_group" "web_sg" {
 
 resource "aws_security_group" "db_sg" {
   name   = "db-sg"
-  vpc_id = data.aws_vpc.default.id
+  vpc_id = aws_vpc.main.id
 
   ingress {
     from_port       = 3306
@@ -87,7 +88,7 @@ resource "aws_security_group" "db_sg" {
 }
 
 # ----------------------
-# Dynamische Amazon Linux 2 AMI ophalen
+# Dynamische Amazon Linux 2 AMI
 # ----------------------
 data "aws_ami" "amazon_linux" {
   most_recent = true
@@ -106,7 +107,7 @@ resource "aws_instance" "web1" {
   ami             = data.aws_ami.amazon_linux.id
   instance_type   = "t2.micro"
   private_ip      = var.web1_ip
-  subnet_id       = data.aws_subnets.default_vpc_subnets.ids[0]
+  subnet_id       = aws_subnet.main_subnet.id
   security_groups = [aws_security_group.web_sg.name]
   tags = { Name = var.web1_name }
 }
@@ -115,7 +116,7 @@ resource "aws_instance" "web2" {
   ami             = data.aws_ami.amazon_linux.id
   instance_type   = "t2.micro"
   private_ip      = var.web2_ip
-  subnet_id       = data.aws_subnets.default_vpc_subnets.ids[0]
+  subnet_id       = aws_subnet.main_subnet.id
   security_groups = [aws_security_group.web_sg.name]
   tags = { Name = var.web2_name }
 }
@@ -127,7 +128,7 @@ resource "aws_instance" "db" {
   ami             = data.aws_ami.amazon_linux.id
   instance_type   = "t2.micro"
   private_ip      = var.db_ip
-  subnet_id       = data.aws_subnets.default_vpc_subnets.ids[0]
+  subnet_id       = aws_subnet.main_subnet.id
   security_groups = [aws_security_group.db_sg.name]
   tags = { Name = var.db_name }
 }
