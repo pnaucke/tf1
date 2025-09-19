@@ -12,44 +12,20 @@ provider "aws" {
   region = "eu-central-1"
 }
 
-# ----------------------
-# Variabelen (voor eenvoud in 1 bestand)
-# ----------------------
-variable "web1_name" { default = "web1" }
-variable "web2_name" { default = "web2" }
-variable "db_name"   { default = "database" }
-
-variable "web1_ip" { default = "172.31.0.10" }
-variable "web2_ip" { default = "172.31.0.11" }
-variable "db_ip"   { default = "172.31.16.10" }
-
-# ----------------------
-# Data default VPC
-# ----------------------
+# Gebruik bestaande default VPC
 data "aws_vpc" "default" {
   default = true
 }
 
-# ----------------------
-# Subnets
-# ----------------------
-resource "aws_subnet" "subnet_a" {
-  vpc_id            = data.aws_vpc.default.id
-  cidr_block        = "172.31.0.0/20"
-  availability_zone = "eu-central-1a"
-  tags = { Name = "subnet-a" }
+# Gebruik bestaande subnets
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
 }
 
-resource "aws_subnet" "subnet_b" {
-  vpc_id            = data.aws_vpc.default.id
-  cidr_block        = "172.31.16.0/20"
-  availability_zone = "eu-central-1b"
-  tags = { Name = "subnet-b" }
-}
-
-# ----------------------
 # Security Groups
-# ----------------------
 resource "aws_security_group" "web_sg" {
   name   = "web-sg"
   vpc_id = data.aws_vpc.default.id
@@ -58,7 +34,7 @@ resource "aws_security_group" "web_sg" {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # publiek toegankelijk
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -77,7 +53,7 @@ resource "aws_security_group" "db_sg" {
     from_port       = 3306
     to_port         = 3306
     protocol        = "tcp"
-    security_groups = [aws_security_group.web_sg.id] # alleen web SG toegang
+    security_groups = [aws_security_group.web_sg.id]
   }
 
   egress {
@@ -88,32 +64,31 @@ resource "aws_security_group" "db_sg" {
   }
 }
 
-# ----------------------
-# EC2 Instances
-# ----------------------
+# Webservers
 resource "aws_instance" "web1" {
-  ami           = "ami-07e9032b01a41341a" # Amazon Linux 2 x86_64
-  instance_type = "t2.micro"
-  private_ip    = var.web1_ip
-  subnet_id     = aws_subnet.subnet_a.id
+  ami             = "ami-07e9032b01a41341a"
+  instance_type   = "t2.micro"
+  subnet_id       = data.aws_subnets.default.ids[0]
   security_groups = [aws_security_group.web_sg.name]
-  tags = { Name = var.web1_name }
+  private_ip      = "10.0.1.10"
+  tags = { Name = "web1" }
 }
 
 resource "aws_instance" "web2" {
-  ami           = "ami-07e9032b01a41341a"
-  instance_type = "t2.micro"
-  private_ip    = var.web2_ip
-  subnet_id     = aws_subnet.subnet_a.id
+  ami             = "ami-07e9032b01a41341a"
+  instance_type   = "t2.micro"
+  subnet_id       = data.aws_subnets.default.ids[1]
   security_groups = [aws_security_group.web_sg.name]
-  tags = { Name = var.web2_name }
+  private_ip      = "10.0.1.11"
+  tags = { Name = "web2" }
 }
 
+# Database
 resource "aws_instance" "db" {
-  ami           = "ami-07e9032b01a41341a"
-  instance_type = "t2.micro"
-  private_ip    = var.db_ip
-  subnet_id     = aws_subnet.subnet_b.id
+  ami             = "ami-07e9032b01a41341a"
+  instance_type   = "t2.micro"
+  subnet_id       = data.aws_subnets.default.ids[2]
   security_groups = [aws_security_group.db_sg.name]
-  tags = { Name = var.db_name }
+  private_ip      = "10.0.1.20"
+  tags = { Name = "database" }
 }
