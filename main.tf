@@ -25,12 +25,10 @@ variable "aws_region" {
   default     = "eu-central-1"
 }
 
-# Servernamen
 variable "web1_name" { default = "web1" }
 variable "web2_name" { default = "web2" }
 variable "db_name"   { default = "database" }
 
-# IP adressen van servers
 variable "web1_ip" { default = "10.0.1.10" }
 variable "web2_ip" { default = "10.0.1.11" }
 variable "db_ip"   { default = "10.0.1.20" }
@@ -107,28 +105,28 @@ resource "aws_security_group" "db_sg" {
 # EC2 Instances
 # ----------------------
 resource "aws_instance" "web1" {
-  ami           = data.aws_ami.amazon_linux.id
-  instance_type = "t2.micro"
-  private_ip    = var.web1_ip
-  subnet_id     = element(data.aws_subnets.default.ids, 0)
-  security_groups = [aws_security_group.web_sg.name]
+  ami                    = data.aws_ami.amazon_linux.id
+  instance_type          = "t2.micro"
+  private_ip             = var.web1_ip
+  subnet_id              = element(data.aws_subnets.default.ids, 0)
+  vpc_security_group_ids  = [aws_security_group.web_sg.id]
   tags = { Name = var.web1_name }
 }
 
 resource "aws_instance" "web2" {
-  ami           = data.aws_ami.amazon_linux.id
-  instance_type = "t2.micro"
-  private_ip    = var.web2_ip
-  subnet_id     = element(data.aws_subnets.default.ids, 0)
-  security_groups = [aws_security_group.web_sg.name]
+  ami                    = data.aws_ami.amazon_linux.id
+  instance_type          = "t2.micro"
+  private_ip             = var.web2_ip
+  subnet_id              = element(data.aws_subnets.default.ids, 0)
+  vpc_security_group_ids  = [aws_security_group.web_sg.id]
   tags = { Name = var.web2_name }
 }
 
 resource "aws_instance" "db" {
-  ami           = data.aws_ami.amazon_linux.id
-  instance_type = "t2.micro"
-  private_ip    = var.db_ip
-  subnet_id     = element(data.aws_subnets.default.ids, 0)
-  security_groups = [aws_security_group.db_sg.name]
+  ami                    = data.aws_ami.amazon_linux.id
+  instance_type          = "t2.micro"
+  private_ip             = var.db_ip
+  subnet_id              = element(data.aws_subnets.default.ids, 0)
+  vpc_security_group_ids  = [aws_security_group.db_sg.id]
   tags = { Name = var.db_name }
 }
