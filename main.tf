@@ -9,37 +9,24 @@ terraform {
 }
 
 provider "aws" {
-  region = var.aws_region
+  region = "eu-central-1" # pas aan als je een andere regio wilt
 }
 
 # ----------------------
-# Hub VPC en subnet
+# Bestaande default VPC
 # ----------------------
-resource "aws_vpc" "hub" {
-  cidr_block = var.hub_cidr
-  tags = { Name = "hub-vpc" }
-}
-
-resource "aws_subnet" "hub_subnet" {
-  vpc_id            = aws_vpc.hub.id
-  cidr_block        = var.hub_subnet_cidr
-  availability_zone = "${var.aws_region}a"
-  tags = { Name = "hub-subnet" }
+data "aws_vpc" "default" {
+  id = "vpc-02ef01d6d3413d850"
 }
 
 # ----------------------
-# Spoke VPC en subnet
+# Subnets
 # ----------------------
-resource "aws_vpc" "spoke" {
-  cidr_block = var.spoke_cidr
-  tags = { Name = "spoke-vpc" }
-}
-
-resource "aws_subnet" "spoke_subnet" {
-  vpc_id            = aws_vpc.spoke.id
-  cidr_block        = var.spoke_subnet_cidr
-  availability_zone = "${var.aws_region}a"
-  tags = { Name = "spoke-subnet" }
+resource "aws_subnet" "subnet_a" {
+  vpc_id            = data.aws_vpc.default.id
+  cidr_block        = "10.1.1.0/24"
+  availability_zone = "eu-central-1a"
+  tags = { Name = "subnet-a" }
 }
 
 # ----------------------
@@ -47,13 +34,13 @@ resource "aws_subnet" "spoke_subnet" {
 # ----------------------
 resource "aws_security_group" "web_sg" {
   name   = "web-sg"
-  vpc_id = aws_vpc.spoke.id
+  vpc_id = data.aws_vpc.default.id
 
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"] # webservers bereikbaar van buiten
   }
 
   egress {
@@ -66,13 +53,13 @@ resource "aws_security_group" "web_sg" {
 
 resource "aws_security_group" "db_sg" {
   name   = "db-sg"
-  vpc_id = aws_vpc.spoke.id
+  vpc_id = data.aws_vpc.default.id
 
   ingress {
     from_port       = 3306
     to_port         = 3306
     protocol        = "tcp"
-    security_groups = [aws_security_group.web_sg.id]
+    security_groups = [aws_security_group.web_sg.id] # alleen webservers mogen verbinden
   }
 
   egress {
@@ -84,55 +71,31 @@ resource "aws_security_group" "db_sg" {
 }
 
 # ----------------------
-# Webservers met user_data
+# EC2 Instances
 # ----------------------
 resource "aws_instance" "web1" {
-  ami           = "ami-07e9032b01a41341a"
-  instance_type = "t2.micro"
-  private_ip    = var.web1_ip
-  subnet_id     = aws_subnet.spoke_subnet.id
+  ami             = "ami-07e9032b01a41341a" # AMI uit jouw regio
+  instance_type   = "t2.micro"
+  private_ip      = "10.1.1.10"
+  subnet_id       = aws_subnet.subnet_a.id
   security_groups = [aws_security_group.web_sg.name]
-
-  user_data = <<-EOF
-              #!/bin/bash
-              yum update -y
-              yum install -y httpd
-              systemctl enable httpd
-              systemctl start httpd
-              echo "<h1>Webserver 1</h1>" > /var/www/html/index.html
-              EOF
-
-  tags = { Name = var.web1_name }
+  tags = { Name = "web1" }
 }
 
 resource "aws_instance" "web2" {
-  ami           = "ami-07e9032b01a41341a"
-  instance_type = "t2.micro"
-  private_ip    = var.web2_ip
-  subnet_id     = aws_subnet.spoke_subnet.id
+  ami             = "ami-07e9032b01a41341a"
+  instance_type   = "t2.micro"
+  private_ip      = "10.1.1.11"
+  subnet_id       = aws_subnet.subnet_a.id
   security_groups = [aws_security_group.web_sg.name]
-
-  user_data = <<-EOF
-              #!/bin/bash
-              yum update -y
-              yum install -y httpd
-              systemctl enable httpd
-              systemctl start httpd
-              echo "<h1>Webserver 2</h1>" > /var/www/html/index.html
-              EOF
-
-  tags = { Name = var.web2_name }
+  tags = { Name = "web2" }
 }
 
-# ----------------------
-# Database
-# ----------------------
 resource "aws_instance" "db" {
-  ami           = "ami-07e9032b01a41341a"
-  instance_type = "t2.micro"
-  private_ip    = var.db_ip
-  subnet_id     = aws_subnet.spoke_subnet.id
+  ami             = "ami-07e9032b01a41341a"
+  instance_type   = "t2.micro"
+  private_ip      = "10.1.1.20"
+  subnet_id       = aws_subnet.subnet_a.id
   security_groups = [aws_security_group.db_sg.name]
-
-  tags = { Name = var.db_name }
+  tags = { Name = "database" }
 }
