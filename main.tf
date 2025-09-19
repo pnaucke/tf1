@@ -13,41 +13,33 @@ provider "aws" {
 }
 
 # ----------------------
-# Hub VPC en subnet
+# Haal default VPC op
 # ----------------------
-resource "aws_vpc" "hub" {
-  cidr_block = var.hub_cidr
-  tags = { Name = "hub-vpc" }
-}
-
-resource "aws_subnet" "hub_subnet" {
-  vpc_id            = aws_vpc.hub.id
-  cidr_block        = var.hub_subnet_cidr
-  availability_zone = "${var.aws_region}a"
-  tags = { Name = "hub-subnet" }
+data "aws_vpc" "default" {
+  default = true
 }
 
 # ----------------------
-# Spoke VPC en subnet
+# Subnet in default VPC
 # ----------------------
-resource "aws_vpc" "spoke" {
-  cidr_block = var.spoke_cidr
-  tags = { Name = "spoke-vpc" }
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
 }
 
-resource "aws_subnet" "spoke_subnet" {
-  vpc_id            = aws_vpc.spoke.id
-  cidr_block        = var.spoke_subnet_cidr
-  availability_zone = "${var.aws_region}a"
-  tags = { Name = "spoke-subnet" }
+# Voor dit voorbeeld pakken we het eerste subnet
+locals {
+  default_subnet_id = data.aws_subnets.default.ids[0]
 }
 
 # ----------------------
-# Security Groups
+# Security Groups in default VPC
 # ----------------------
 resource "aws_security_group" "web_sg" {
   name   = "web-sg"
-  vpc_id = aws_vpc.spoke.id
+  vpc_id = data.aws_vpc.default.id
 
   ingress {
     from_port   = 80
@@ -66,13 +58,13 @@ resource "aws_security_group" "web_sg" {
 
 resource "aws_security_group" "db_sg" {
   name   = "db-sg"
-  vpc_id = aws_vpc.spoke.id
+  vpc_id = data.aws_vpc.default.id
 
   ingress {
-    from_port        = 3306
-    to_port          = 3306
-    protocol         = "tcp"
-    security_groups  = [aws_security_group.web_sg.id]
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.web_sg.id]
   }
 
   egress {
@@ -83,33 +75,35 @@ resource "aws_security_group" "db_sg" {
   }
 }
 
+# ----------------------
 # Webservers
-
+# ----------------------
 resource "aws_instance" "web1" {
-  ami           = "ami-07e9032b01a41341a"
-  instance_type = "t2.micro"
-  private_ip    = var.web1_ip
-  subnet_id     = aws_subnet.spoke_subnet.id
-  security_groups = [aws_security_group.web_sg.name]
-  tags = { Name = var.web1_name }
+  ami                    = "ami-07e9032b01a41341a"
+  instance_type          = "t2.micro"
+  private_ip             = var.web1_ip
+  subnet_id              = local.default_subnet_id
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
+  tags                   = { Name = var.web1_name }
 }
 
 resource "aws_instance" "web2" {
-  ami           = "ami-07e9032b01a41341a"
-  instance_type = "t2.micro"
-  private_ip    = var.web2_ip
-  subnet_id     = aws_subnet.spoke_subnet.id
-  security_groups = [aws_security_group.web_sg.name]
-  tags = { Name = var.web2_name }
+  ami                    = "ami-07e9032b01a41341a"
+  instance_type          = "t2.micro"
+  private_ip             = var.web2_ip
+  subnet_id              = local.default_subnet_id
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
+  tags                   = { Name = var.web2_name }
 }
 
+# ----------------------
 # Database
-
+# ----------------------
 resource "aws_instance" "db" {
-  ami           = "ami-07e9032b01a41341a"
-  instance_type = "t2.micro"
-  private_ip    = var.db_ip
-  subnet_id     = aws_subnet.spoke_subnet.id
-  security_groups = [aws_security_group.db_sg.name]
-  tags = { Name = var.db_name }
+  ami                    = "ami-07e9032b01a41341a"
+  instance_type          = "t2.micro"
+  private_ip             = var.db_ip
+  subnet_id              = local.default_subnet_id
+  vpc_security_group_ids = [aws_security_group.db_sg.id]
+  tags                   = { Name = var.db_name }
 }
