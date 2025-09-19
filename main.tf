@@ -12,12 +12,13 @@ provider "aws" {
   region = "eu-central-1"
 }
 
-# Gebruik bestaande default VPC
+# ----------------------
+# Gebruik bestaande default VPC en subnets
+# ----------------------
 data "aws_vpc" "default" {
   default = true
 }
 
-# Gebruik bestaande subnets
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
@@ -25,11 +26,15 @@ data "aws_subnets" "default" {
   }
 }
 
-# Security Groups (unieke namen)
+# ----------------------
+# Security Groups
+# ----------------------
 resource "aws_security_group" "web_sg" {
-  name   = "web-sg-1"
+  name   = "web-sg"
   vpc_id = data.aws_vpc.default.id
 
+  description = "Security group voor webservers (toegang vanaf internet)"
+  
   ingress {
     from_port   = 80
     to_port     = 80
@@ -46,8 +51,10 @@ resource "aws_security_group" "web_sg" {
 }
 
 resource "aws_security_group" "db_sg" {
-  name   = "db-sg-1"
+  name   = "db-sg"
   vpc_id = data.aws_vpc.default.id
+
+  description = "Security group voor database (alleen webservers toegang)"
 
   ingress {
     from_port       = 3306
@@ -64,31 +71,32 @@ resource "aws_security_group" "db_sg" {
   }
 }
 
-# Webservers
+# ----------------------
+# EC2 Instances
+# ----------------------
 resource "aws_instance" "web1" {
-  ami             = "ami-07e9032b01a41341a"
+  ami             = "ami-0b898040803850657"
   instance_type   = "t2.micro"
   subnet_id       = data.aws_subnets.default.ids[0]
   security_groups = [aws_security_group.web_sg.name]
-  private_ip      = "10.0.1.10"
+  private_ip      = "172.31.0.10"
   tags = { Name = "web1" }
 }
 
 resource "aws_instance" "web2" {
-  ami             = "ami-07e9032b01a41341a"
+  ami             = "ami-0b898040803850657"
   instance_type   = "t2.micro"
   subnet_id       = data.aws_subnets.default.ids[1]
   security_groups = [aws_security_group.web_sg.name]
-  private_ip      = "10.0.1.11"
+  private_ip      = "172.31.1.10"
   tags = { Name = "web2" }
 }
 
-# Database
 resource "aws_instance" "db" {
-  ami             = "ami-07e9032b01a41341a"
+  ami             = "ami-0b898040803850657"
   instance_type   = "t2.micro"
   subnet_id       = data.aws_subnets.default.ids[2]
   security_groups = [aws_security_group.db_sg.name]
-  private_ip      = "10.0.1.20"
+  private_ip      = "172.31.2.10"
   tags = { Name = "database" }
 }
