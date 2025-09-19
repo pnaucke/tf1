@@ -13,18 +13,33 @@ provider "aws" {
 }
 
 # ----------------------
-# VPC en subnet
+# Hub VPC en subnet
 # ----------------------
-resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
-  tags = { Name = "main-vpc" }
+resource "aws_vpc" "hub" {
+  cidr_block = var.hub_cidr
+  tags = { Name = "hub-vpc" }
 }
 
-resource "aws_subnet" "main_subnet" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.1.0/24"
+resource "aws_subnet" "hub_subnet" {
+  vpc_id            = aws_vpc.hub.id
+  cidr_block        = var.hub_subnet_cidr
   availability_zone = "${var.aws_region}a"
-  tags              = { Name = "main-subnet" }
+  tags = { Name = "hub-subnet" }
+}
+
+# ----------------------
+# Spoke VPC en subnet
+# ----------------------
+resource "aws_vpc" "spoke" {
+  cidr_block = var.spoke_cidr
+  tags = { Name = "spoke-vpc" }
+}
+
+resource "aws_subnet" "spoke_subnet" {
+  vpc_id            = aws_vpc.spoke.id
+  cidr_block        = var.spoke_subnet_cidr
+  availability_zone = "${var.aws_region}a"
+  tags = { Name = "spoke-subnet" }
 }
 
 # ----------------------
@@ -32,7 +47,7 @@ resource "aws_subnet" "main_subnet" {
 # ----------------------
 resource "aws_security_group" "web_sg" {
   name   = "web-sg"
-  vpc_id = aws_vpc.main.id
+  vpc_id = aws_vpc.spoke.id
 
   ingress {
     from_port   = 80
@@ -51,7 +66,7 @@ resource "aws_security_group" "web_sg" {
 
 resource "aws_security_group" "db_sg" {
   name   = "db-sg"
-  vpc_id = aws_vpc.main.id
+  vpc_id = aws_vpc.spoke.id
 
   ingress {
     from_port       = 3306
@@ -69,34 +84,55 @@ resource "aws_security_group" "db_sg" {
 }
 
 # ----------------------
-# Webservers
+# Webservers met user_data
 # ----------------------
 resource "aws_instance" "web1" {
-  ami                    = "ami-07e9032b01a41341a"
-  instance_type          = "t2.micro"
-  private_ip             = var.web1_ip
-  subnet_id              = aws_subnet.main_subnet.id
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
-  tags                   = { Name = var.web1_name }
+  ami           = "ami-07e9032b01a41341a"
+  instance_type = "t2.micro"
+  private_ip    = var.web1_ip
+  subnet_id     = aws_subnet.spoke_subnet.id
+  security_groups = [aws_security_group.web_sg.name]
+
+  user_data = <<-EOF
+              #!/bin/bash
+              yum update -y
+              yum install -y httpd
+              systemctl enable httpd
+              systemctl start httpd
+              echo "<h1>Webserver 1</h1>" > /var/www/html/index.html
+              EOF
+
+  tags = { Name = var.web1_name }
 }
 
 resource "aws_instance" "web2" {
-  ami                    = "ami-07e9032b01a41341a"
-  instance_type          = "t2.micro"
-  private_ip             = var.web2_ip
-  subnet_id              = aws_subnet.main_subnet.id
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
-  tags                   = { Name = var.web2_name }
+  ami           = "ami-07e9032b01a41341a"
+  instance_type = "t2.micro"
+  private_ip    = var.web2_ip
+  subnet_id     = aws_subnet.spoke_subnet.id
+  security_groups = [aws_security_group.web_sg.name]
+
+  user_data = <<-EOF
+              #!/bin/bash
+              yum update -y
+              yum install -y httpd
+              systemctl enable httpd
+              systemctl start httpd
+              echo "<h1>Webserver 2</h1>" > /var/www/html/index.html
+              EOF
+
+  tags = { Name = var.web2_name }
 }
 
 # ----------------------
 # Database
 # ----------------------
 resource "aws_instance" "db" {
-  ami                    = "ami-07e9032b01a41341a"
-  instance_type          = "t2.micro"
-  private_ip             = var.db_ip
-  subnet_id              = aws_subnet.main_subnet.id
-  vpc_security_group_ids = [aws_security_group.db_sg.id]
-  tags                   = { Name = var.db_name }
+  ami           = "ami-07e9032b01a41341a"
+  instance_type = "t2.micro"
+  private_ip    = var.db_ip
+  subnet_id     = aws_subnet.spoke_subnet.id
+  security_groups = [aws_security_group.db_sg.name]
+
+  tags = { Name = var.db_name }
 }
