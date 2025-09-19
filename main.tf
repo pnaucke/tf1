@@ -83,9 +83,8 @@ resource "aws_security_group" "db_sg" {
   }
 }
 
-# ----------------------
 # Webservers
-# ----------------------
+
 resource "aws_instance" "web1" {
   ami           = "ami-07e9032b01a41341a"
   instance_type = "t2.micro"
@@ -104,9 +103,8 @@ resource "aws_instance" "web2" {
   tags = { Name = var.web2_name }
 }
 
-# ----------------------
 # Database
-# ----------------------
+
 resource "aws_instance" "db" {
   ami           = "ami-07e9032b01a41341a"
   instance_type = "t2.micro"
