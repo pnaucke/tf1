@@ -42,8 +42,11 @@ data "aws_vpc" "default" {
   default = true
 }
 
-data "aws_subnet_ids" "default" {
-  vpc_id = data.aws_vpc.default.id
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
 }
 
 data "aws_ami" "amazon_linux" {
@@ -107,7 +110,7 @@ resource "aws_instance" "web1" {
   ami           = data.aws_ami.amazon_linux.id
   instance_type = "t2.micro"
   private_ip    = var.web1_ip
-  subnet_id     = element(data.aws_subnet_ids.default.ids, 0)
+  subnet_id     = element(data.aws_subnets.default.ids, 0)
   security_groups = [aws_security_group.web_sg.name]
   tags = { Name = var.web1_name }
 }
@@ -116,7 +119,7 @@ resource "aws_instance" "web2" {
   ami           = data.aws_ami.amazon_linux.id
   instance_type = "t2.micro"
   private_ip    = var.web2_ip
-  subnet_id     = element(data.aws_subnet_ids.default.ids, 0)
+  subnet_id     = element(data.aws_subnets.default.ids, 0)
   security_groups = [aws_security_group.web_sg.name]
   tags = { Name = var.web2_name }
 }
@@ -125,7 +128,7 @@ resource "aws_instance" "db" {
   ami           = data.aws_ami.amazon_linux.id
   instance_type = "t2.micro"
   private_ip    = var.db_ip
-  subnet_id     = element(data.aws_subnet_ids.default.ids, 0)
+  subnet_id     = element(data.aws_subnets.default.ids, 0)
   security_groups = [aws_security_group.db_sg.name]
   tags = { Name = var.db_name }
 }
