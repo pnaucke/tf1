@@ -12,9 +12,8 @@ provider "aws" {
   region = var.aws_region
 }
 
-# ----------------------
 # Variabelen
-# ----------------------
+
 variable "aws_region" {
   description = "AWS regio waarin de resources komen"
   type        = string
@@ -31,9 +30,8 @@ variable "web1_ip" { default = "10.1.1.10" }
 variable "web2_ip" { default = "10.1.1.11" }
 variable "db_ip"   { default = "10.1.1.20" }
 
-# ----------------------
 # Bestaande VPC en subnets
-# ----------------------
+
 data "aws_vpc" "existing" {
   id = "vpc-02ef01d6d3413d850"
 }
@@ -46,9 +44,8 @@ data "aws_subnet" "subnet_b" {
   id = "subnet-0adf7de4d0fe3974b"
 }
 
-# ----------------------
 # Security Groups
-# ----------------------
+
 resource "aws_security_group" "web_sg" {
   name   = "web-sg"
   vpc_id = data.aws_vpc.existing.id
@@ -87,9 +84,8 @@ resource "aws_security_group" "db_sg" {
   }
 }
 
-# ----------------------
 # Amazon Linux AMI ophalen
-# ----------------------
+
 data "aws_ami" "amazon_linux" {
   most_recent = true
   owners      = ["amazon"]
@@ -100,9 +96,8 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
-# ----------------------
 # Webservers
-# ----------------------
+
 resource "aws_instance" "web1" {
   ami           = data.aws_ami.amazon_linux.id
   instance_type = "t2.micro"
@@ -121,9 +116,8 @@ resource "aws_instance" "web2" {
   tags = { Name = var.web2_name }
 }
 
-# ----------------------
 # Database server
-# ----------------------
+
 resource "aws_instance" "db" {
   ami           = data.aws_ami.amazon_linux.id
   instance_type = "t2.micro"
