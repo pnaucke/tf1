@@ -25,9 +25,9 @@ data "aws_subnets" "default" {
   }
 }
 
-# Security Groups
+# Security Groups (unieke namen)
 resource "aws_security_group" "web_sg" {
-  name   = "web-sg"
+  name   = "web-sg-1"
   vpc_id = data.aws_vpc.default.id
 
   ingress {
@@ -46,7 +46,7 @@ resource "aws_security_group" "web_sg" {
 }
 
 resource "aws_security_group" "db_sg" {
-  name   = "db-sg"
+  name   = "db-sg-1"
   vpc_id = data.aws_vpc.default.id
 
   ingress {
