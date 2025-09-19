@@ -87,7 +87,7 @@ resource "aws_security_group" "db_sg" {
 # Webservers
 # ----------------------
 resource "aws_instance" "web1" {
-  ami           = "ami-0444794b421ec32e4"
+  ami           = "ami-07e9032b01a41341a"
   instance_type = "t2.micro"
   private_ip    = var.web1_ip
   subnet_id     = aws_subnet.spoke_subnet.id
@@ -96,7 +96,7 @@ resource "aws_instance" "web1" {
 }
 
 resource "aws_instance" "web2" {
-  ami           = "ami-0444794b421ec32e4"
+  ami           = "ami-07e9032b01a41341a"
   instance_type = "t2.micro"
   private_ip    = var.web2_ip
   subnet_id     = aws_subnet.spoke_subnet.id
@@ -108,7 +108,7 @@ resource "aws_instance" "web2" {
 # Database
 # ----------------------
 resource "aws_instance" "db" {
-  ami           = "ami-0444794b421ec32e4"
+  ami           = "ami-07e9032b01a41341a"
   instance_type = "t2.micro"
   private_ip    = var.db_ip
   subnet_id     = aws_subnet.spoke_subnet.id
