@@ -57,13 +57,6 @@ resource "aws_security_group" "web_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  ingress {
-    from_port   = 22  # SSH poort openzetten
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   egress {
     from_port   = 0
     to_port     = 0
@@ -95,27 +88,25 @@ resource "aws_security_group" "db_sg" {
 # EC2 Instances (IP wordt automatisch gekozen)
 # ----------------------
 resource "aws_instance" "web1" {
-  ami                     = data.aws_ami.amazon_linux.id
-  instance_type           = "t2.micro"
-  subnet_id               = element(data.aws_subnets.default.ids, 0)
+  ami                    = data.aws_ami.amazon_linux.id
+  instance_type          = "t2.micro"
+  subnet_id              = element(data.aws_subnets.default.ids, 0)
   vpc_security_group_ids  = [aws_security_group.web_sg.id]
-  key_name                = "key-0a07792759fe3dda9"  # bestaande key koppelen
   tags = { Name = "web1" }
 }
 
 resource "aws_instance" "web2" {
-  ami                     = data.aws_ami.amazon_linux.id
-  instance_type           = "t2.micro"
-  subnet_id               = element(data.aws_subnets.default.ids, 0)
+  ami                    = data.aws_ami.amazon_linux.id
+  instance_type          = "t2.micro"
+  subnet_id              = element(data.aws_subnets.default.ids, 0)
   vpc_security_group_ids  = [aws_security_group.web_sg.id]
-  key_name                = "key-0a07792759fe3dda9"
   tags = { Name = "web2" }
 }
 
 resource "aws_instance" "db" {
-  ami                     = data.aws_ami.amazon_linux.id
-  instance_type           = "t2.micro"
-  subnet_id               = element(data.aws_subnets.default.ids, 0)
+  ami                    = data.aws_ami.amazon_linux.id
+  instance_type          = "t2.micro"
+  subnet_id              = element(data.aws_subnets.default.ids, 0)
   vpc_security_group_ids  = [aws_security_group.db_sg.id]
   tags = { Name = "database" }
 }
