@@ -205,3 +205,7 @@ resource "aws_lb_target_group_attachment" "web2_attach" {
   target_id        = aws_instance.web2.id
   port             = 80
 }
+
+# ----------------------
+# Feest vieren (Als het gelukt is)
+# ----------------------
