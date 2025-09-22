@@ -23,21 +23,11 @@ data "aws_vpc" "default" {
   default = true
 }
 
-# Pak de default subnets per availability zone
-data "aws_subnet" "default_subnet_a" {
+data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.default.id]
   }
-  availability_zone = "eu-central-1a"
-}
-
-data "aws_subnet" "default_subnet_b" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
-  }
-  availability_zone = "eu-central-1b"
 }
 
 data "aws_ami" "amazon_linux" {
@@ -51,6 +41,14 @@ data "aws_ami" "amazon_linux" {
 
 resource "random_id" "suffix" {
   byte_length = 2
+}
+
+# ----------------------
+# Key Pair
+# ----------------------
+resource "aws_key_pair" "project1" {
+  key_name   = "Project1"
+  public_key = file("Project1.pub")
 }
 
 # ----------------------
@@ -102,57 +100,90 @@ resource "aws_security_group" "db_sg" {
 }
 
 # ----------------------
-# Key pair
-# ----------------------
-resource "aws_key_pair" "project1" {
-  key_name   = "Project1"
-  public_key = file("Project1.pub")  # hier moet je je publieke key zetten
-}
-
-# ----------------------
 # EC2 Instances
 # ----------------------
 resource "aws_instance" "web1" {
-  ami                    = data.aws_ami.amazon_linux.id
-  instance_type          = "t2.micro"
-  subnet_id              = data.aws_subnet.default_subnet_a.id
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
-  key_name               = aws_key_pair.project1.key_name
-  tags = { Name = "web1" }
+  ami                     = data.aws_ami.amazon_linux.id
+  instance_type           = "t2.micro"
+  subnet_id               = element(data.aws_subnets.default.ids, 0)
+  vpc_security_group_ids  = [aws_security_group.web_sg.id]
+  key_name                = aws_key_pair.project1.key_name
 
   user_data = <<-EOF
               #!/bin/bash
-              yum update -y
-              yum install -y httpd
-              systemctl start httpd
-              systemctl enable httpd
               echo "Hello World from Web1" > /var/www/html/index.html
+              yum install -y httpd
+              systemctl enable httpd
+              systemctl start httpd
               EOF
+
+  tags = { Name = "web1" }
 }
 
 resource "aws_instance" "web2" {
-  ami                    = data.aws_ami.amazon_linux.id
-  instance_type          = "t2.micro"
-  subnet_id              = data.aws_subnet.default_subnet_b.id
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
-  key_name               = aws_key_pair.project1.key_name
-  tags = { Name = "web2" }
+  ami                     = data.aws_ami.amazon_linux.id
+  instance_type           = "t2.micro"
+  subnet_id               = element(data.aws_subnets.default.ids, 0)
+  vpc_security_group_ids  = [aws_security_group.web_sg.id]
+  key_name                = aws_key_pair.project1.key_name
 
   user_data = <<-EOF
               #!/bin/bash
-              yum update -y
-              yum install -y httpd
-              systemctl start httpd
-              systemctl enable httpd
               echo "Hello World from Web2" > /var/www/html/index.html
+              yum install -y httpd
+              systemctl enable httpd
+              systemctl start httpd
               EOF
+
+  tags = { Name = "web2" }
 }
 
 resource "aws_instance" "db" {
-  ami                    = data.aws_ami.amazon_linux.id
-  instance_type          = "t2.micro"
-  subnet_id              = data.aws_subnet.default_subnet_a.id
-  vpc_security_group_ids = [aws_security_group.db_sg.id]
-  key_name               = aws_key_pair.project1.key_name
+  ami                     = data.aws_ami.amazon_linux.id
+  instance_type           = "t2.micro"
+  subnet_id               = element(data.aws_subnets.default.ids, 0)
+  vpc_security_group_ids  = [aws_security_group.db_sg.id]
+  key_name                = aws_key_pair.project1.key_name
+
   tags = { Name = "database" }
+}
+
+# ----------------------
+# Load Balancer
+# ----------------------
+resource "aws_lb" "web_lb" {
+  name               = "web-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.web_sg.id]
+  subnets            = data.aws_subnets.default.ids
+}
+
+resource "aws_lb_target_group" "web_tg" {
+  name     = "web-tg"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = data.aws_vpc.default.id
+  target_type = "instance"
+  health_check {
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+}
+
+resource "aws_lb_target_group_attachment" "web1" {
+  target_group_arn = aws_lb_target_group.web_tg.arn
+  target_id        = aws_instance.web1.id
+  port             = 80
+}
+
+resource "aws_lb_target_group_attachment" "web2" {
+  target_group_arn = aws_lb_target_group.web_tg.arn
+  target_id        = aws_instance.web2.id
+  port             = 80
 }
