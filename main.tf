@@ -24,7 +24,7 @@ data "aws_vpc" "default" {
 }
 
 # ----------------------
-# Maak subnets aan voor web en db
+# Maak subnets aan voor web en database
 # ----------------------
 resource "aws_subnet" "web1_subnet" {
   vpc_id            = data.aws_vpc.default.id
