@@ -50,20 +50,19 @@ resource "aws_security_group" "web_sg" {
   name   = "web-sg-${random_id.suffix.hex}"
   vpc_id = data.aws_vpc.default.id
 
-  # HTTP
+  # SSH + HTTP toegang
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # SSH
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Optioneel: beperk tot je IP voor veiligheid
   }
 
   egress {
@@ -94,7 +93,7 @@ resource "aws_security_group" "db_sg" {
 }
 
 # ----------------------
-# EC2 Instances
+# EC2 Instances (webservers met Hello World)
 # ----------------------
 resource "aws_instance" "web1" {
   ami                    = data.aws_ami.amazon_linux.id
@@ -105,10 +104,11 @@ resource "aws_instance" "web1" {
 
   user_data = <<-EOF
               #!/bin/bash
+              yum update -y
               yum install -y httpd
-              echo "Hello World from Web1" > /var/www/html/index.html
               systemctl enable httpd
               systemctl start httpd
+              echo "Hello World from Web1" > /var/www/html/index.html
               EOF
 
   tags = { Name = "web1" }
@@ -123,15 +123,19 @@ resource "aws_instance" "web2" {
 
   user_data = <<-EOF
               #!/bin/bash
+              yum update -y
               yum install -y httpd
-              echo "Hello World from Web2" > /var/www/html/index.html
               systemctl enable httpd
               systemctl start httpd
+              echo "Hello World from Web2" > /var/www/html/index.html
               EOF
 
   tags = { Name = "web2" }
 }
 
+# ----------------------
+# Database instance
+# ----------------------
 resource "aws_instance" "db" {
   ami                    = data.aws_ami.amazon_linux.id
   instance_type          = "t2.micro"
@@ -143,7 +147,7 @@ resource "aws_instance" "db" {
 }
 
 # ----------------------
-# Load Balancer voor webservers
+# Load Balancer
 # ----------------------
 resource "aws_lb" "web_lb" {
   name               = "web-lb"
@@ -154,25 +158,26 @@ resource "aws_lb" "web_lb" {
 }
 
 resource "aws_lb_target_group" "web_tg" {
-  name        = "web-tg"
-  port        = 80
-  protocol    = "HTTP"
+  name     = "web-tg"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = data.aws_vpc.default.id
   target_type = "instance"
-  vpc_id      = data.aws_vpc.default.id
 
   health_check {
     path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200"
     interval            = 30
+    timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 2
-    timeout             = 5
-    matcher             = "200"
   }
 }
 
 resource "aws_lb_listener" "web_listener" {
   load_balancer_arn = aws_lb.web_lb.arn
-  port              = 80
+  port              = "80"
   protocol          = "HTTP"
 
   default_action {
@@ -181,13 +186,16 @@ resource "aws_lb_listener" "web_listener" {
   }
 }
 
-resource "aws_lb_target_group_attachment" "web1_attach" {
+# ----------------------
+# Voeg webservers toe aan de target group
+# ----------------------
+resource "aws_lb_target_group_attachment" "web1_attachment" {
   target_group_arn = aws_lb_target_group.web_tg.arn
   target_id        = aws_instance.web1.id
   port             = 80
 }
 
-resource "aws_lb_target_group_attachment" "web2_attach" {
+resource "aws_lb_target_group_attachment" "web2_attachment" {
   target_group_arn = aws_lb_target_group.web_tg.arn
   target_id        = aws_instance.web2.id
   port             = 80
