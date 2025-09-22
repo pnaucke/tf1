@@ -23,13 +23,6 @@ data "aws_vpc" "default" {
   default = true
 }
 
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
-  }
-}
-
 data "aws_ami" "amazon_linux" {
   most_recent = true
   owners      = ["amazon"]
@@ -44,11 +37,45 @@ resource "random_id" "suffix" {
 }
 
 # ----------------------
+# Subnets
+# ----------------------
+resource "aws_subnet" "web1_subnet" {
+  vpc_id                  = data.aws_vpc.default.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = "eu-central-1a"
+  map_public_ip_on_launch = true
+  tags = { Name = "web1-subnet" }
+}
+
+resource "aws_subnet" "web2_subnet" {
+  vpc_id                  = data.aws_vpc.default.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = "eu-central-1b"
+  map_public_ip_on_launch = true
+  tags = { Name = "web2-subnet" }
+}
+
+resource "aws_subnet" "db_subnet" {
+  vpc_id                  = data.aws_vpc.default.id
+  cidr_block              = "10.0.3.0/24"
+  availability_zone       = "eu-central-1c"
+  map_public_ip_on_launch = false
+  tags = { Name = "db-subnet" }
+}
+
+# ----------------------
 # Security Groups
 # ----------------------
 resource "aws_security_group" "web_sg" {
   name   = "web-sg-${random_id.suffix.hex}"
   vpc_id = data.aws_vpc.default.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   ingress {
     from_port   = 80
@@ -85,28 +112,85 @@ resource "aws_security_group" "db_sg" {
 }
 
 # ----------------------
-# EC2 Instances (IP wordt automatisch gekozen)
+# Load Balancer
+# ----------------------
+resource "aws_lb" "web_lb" {
+  name               = "web-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.web_sg.id]
+  subnets            = [aws_subnet.web1_subnet.id, aws_subnet.web2_subnet.id]
+}
+
+resource "aws_lb_target_group" "web_tg" {
+  name        = "web-tg"
+  port        = 80
+  protocol    = "HTTP"
+  target_type = "instance"
+  vpc_id      = data.aws_vpc.default.id
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 30
+    matcher             = "200"
+    path                = "/"
+    timeout             = 5
+    unhealthy_threshold = 2
+  }
+}
+
+resource "aws_lb_listener" "web_listener" {
+  load_balancer_arn = aws_lb.web_lb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web_tg.arn
+  }
+}
+
+# ----------------------
+# EC2 Instances
 # ----------------------
 resource "aws_instance" "web1" {
   ami                    = data.aws_ami.amazon_linux.id
   instance_type          = "t2.micro"
-  subnet_id              = element(data.aws_subnets.default.ids, 0)
+  subnet_id              = aws_subnet.web1_subnet.id
   vpc_security_group_ids  = [aws_security_group.web_sg.id]
+  key_name               = "key-0a07792759fe3dda9"
+  user_data              = <<-EOF
+              #!/bin/bash
+              echo "Hello World" > /var/www/html/index.html
+              yum install -y httpd
+              systemctl start httpd
+              systemctl enable httpd
+              EOF
   tags = { Name = "web1" }
 }
 
 resource "aws_instance" "web2" {
   ami                    = data.aws_ami.amazon_linux.id
   instance_type          = "t2.micro"
-  subnet_id              = element(data.aws_subnets.default.ids, 0)
+  subnet_id              = aws_subnet.web2_subnet.id
   vpc_security_group_ids  = [aws_security_group.web_sg.id]
+  key_name               = "key-0a07792759fe3dda9"
+  user_data              = <<-EOF
+              #!/bin/bash
+              echo "Hello World" > /var/www/html/index.html
+              yum install -y httpd
+              systemctl start httpd
+              systemctl enable httpd
+              EOF
   tags = { Name = "web2" }
 }
 
 resource "aws_instance" "db" {
   ami                    = data.aws_ami.amazon_linux.id
   instance_type          = "t2.micro"
-  subnet_id              = element(data.aws_subnets.default.ids, 0)
+  subnet_id              = aws_subnet.db_subnet.id
   vpc_security_group_ids  = [aws_security_group.db_sg.id]
+  key_name               = "key-0a07792759fe3dda9"
   tags = { Name = "database" }
 }
