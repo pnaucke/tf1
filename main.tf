@@ -42,12 +42,21 @@ resource "aws_subnet" "web2_subnet" {
   tags = { Name = "web2-subnet" }
 }
 
-resource "aws_subnet" "db_subnet" {
+# Twee DB-subnets in verschillende AZ’s (vereist voor RDS)
+resource "aws_subnet" "db_subnet1" {
   vpc_id                  = data.aws_vpc.default.id
   cidr_block              = "172.31.3.0/24"
+  availability_zone       = "eu-central-1b"
+  map_public_ip_on_launch = false
+  tags = { Name = "db-subnet-1" }
+}
+
+resource "aws_subnet" "db_subnet2" {
+  vpc_id                  = data.aws_vpc.default.id
+  cidr_block              = "172.31.4.0/24"
   availability_zone       = "eu-central-1c"
   map_public_ip_on_launch = false
-  tags = { Name = "db-subnet" }
+  tags = { Name = "db-subnet-2" }
 }
 
 # ----------------------
@@ -119,7 +128,7 @@ resource "aws_security_group" "db_sg" {
 # ----------------------
 resource "aws_db_subnet_group" "db_subnet_group" {
   name       = "db-subnet-group"
-  subnet_ids = [aws_subnet.db_subnet.id]
+  subnet_ids = [aws_subnet.db_subnet1.id, aws_subnet.db_subnet2.id]
 }
 
 resource "aws_db_instance" "db" {
@@ -243,7 +252,3 @@ output "load_balancer_dns" {
 output "db_endpoint" {
   value = aws_db_instance.db.address
 }
-
-# ----------------------
-# Feest
-# ----------------------
