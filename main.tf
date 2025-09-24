@@ -148,7 +148,7 @@ resource "aws_db_instance" "db" {
 }
 
 # ----------------------
-# User Data (Nginx + PHP testpagina)
+# User Data (Nginx + PHP + health check)
 # ----------------------
 locals {
   user_data = <<-EOT
@@ -158,27 +158,24 @@ locals {
     amazon-linux-extras enable php8.0
     yum install -y nginx php php-fpm php-mysqlnd mysql
 
-    # PHP-FPM configureren voor TCP vóór starten
-    sed -i 's/^;listen = .*/listen = 127.0.0.1:9000/' /etc/php-fpm.d/www.conf
+    # PHP-FPM configureren voor TCP
+    echo "listen = 127.0.0.1:9000" > /etc/php-fpm.d/www.conf
 
-    # Start en enable PHP-FPM
+    # Start PHP-FPM en wacht
     systemctl enable php-fpm
     systemctl start php-fpm
+    sleep 10
 
-    # Wacht even zodat PHP-FPM volledig opstart
-    sleep 5
-
-    # Start en enable Nginx
+    # Start Nginx
     systemctl enable nginx
     systemctl start nginx
 
-    # Configureer Nginx om PHP te gebruiken
+    # Configureer Nginx voor PHP
     cat > /etc/nginx/conf.d/default.conf <<'EOF'
     server {
         listen       80 default_server;
         server_name  _;
         root         /usr/share/nginx/html;
-
         index index.php index.html;
 
         location / {
@@ -194,15 +191,17 @@ locals {
     }
     EOF
 
-    # Herstart Nginx voor de nieuwe config
+    # Herstart Nginx
     systemctl restart nginx
 
-    # Maak test PHP pagina
+    # Health check pagina
+    echo "OK" > /usr/share/nginx/html/health.html
+
+    # Test PHP pagina
     cat > /usr/share/nginx/html/index.php <<'EOF'
     <?php
     $server_ip = $_SERVER['SERVER_ADDR'];
 
-    // Database config uit environment
     $db_host = getenv('DB_HOST');
     $db_port = getenv('DB_PORT');
     $db_user = getenv('DB_USER');
@@ -269,7 +268,7 @@ resource "aws_lb_target_group" "web_tg" {
   target_type = "instance"
 
   health_check {
-    path                = "/"
+    path                = "/health.html"
     protocol            = "HTTP"
     matcher             = "200"
     interval            = 30
