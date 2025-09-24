@@ -148,7 +148,7 @@ resource "aws_db_instance" "db" {
 }
 
 # ----------------------
-# User Data (Nginx + PHP test pagina)
+# User Data (Nginx + PHP testpagina)
 # ----------------------
 locals {
   user_data = <<-EOT
@@ -156,37 +156,64 @@ locals {
     yum update -y
     amazon-linux-extras enable nginx1
     amazon-linux-extras enable php8.0
-    yum install -y nginx php php-mysqlnd mysql
+    yum install -y nginx php php-fpm php-mysqlnd mysql
 
     systemctl start nginx
     systemctl enable nginx
+    systemctl start php-fpm
+    systemctl enable php-fpm
 
-cat > /usr/share/nginx/html/index.php <<'EOF'
-<?php
-$server_ip = $_SERVER['SERVER_ADDR'];
+    # Configureer Nginx om PHP te gebruiken
+    cat > /etc/nginx/conf.d/default.conf <<'EOF'
+    server {
+        listen       80 default_server;
+        server_name  _;
+        root         /usr/share/nginx/html;
 
-// Database config uit environment
-$db_host = getenv('DB_HOST');
-$db_port = getenv('DB_PORT');
-$db_user = getenv('DB_USER');
-$db_pass = getenv('DB_PASS');
-$db_name = getenv('DB_NAME');
+        index index.php index.html;
 
-echo "<h1>Webserver IP: $server_ip</h1>";
+        location / {
+            try_files $uri $uri/ =404;
+        }
 
-$conn = @mysqli_connect($db_host, $db_user, $db_pass, $db_name, $db_port);
+        location ~ \.php$ {
+            include fastcgi_params;
+            fastcgi_pass 127.0.0.1:9000;
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        }
+    }
+    EOF
 
-if ($conn) {
-    echo "<p style='color:green'>✅ Database connectie OK</p>";
-    $res = mysqli_query($conn, "SELECT NOW() as tijd");
-    $row = mysqli_fetch_assoc($res);
-    echo "<p>Database tijd: " . $row['tijd'] . "</p>";
-    mysqli_close($conn);
-} else {
-    echo "<p style='color:red'>❌ Database connectie mislukt: " . mysqli_connect_error() . "</p>";
-}
-?>
-EOF
+    systemctl reload nginx
+
+    # Maak test PHP pagina
+    cat > /usr/share/nginx/html/index.php <<'EOF'
+    <?php
+    $server_ip = $_SERVER['SERVER_ADDR'];
+
+    // Database config uit environment
+    $db_host = getenv('DB_HOST');
+    $db_port = getenv('DB_PORT');
+    $db_user = getenv('DB_USER');
+    $db_pass = getenv('DB_PASS');
+    $db_name = getenv('DB_NAME');
+
+    echo "<h1>Webserver IP: $server_ip</h1>";
+
+    $conn = @mysqli_connect($db_host, $db_user, $db_pass, $db_name, $db_port);
+
+    if ($conn) {
+        echo "<p style='color:green'>✅ Database connectie OK</p>";
+        $res = mysqli_query($conn, "SELECT NOW() as tijd");
+        $row = mysqli_fetch_assoc($res);
+        echo "<p>Database tijd: " . $row['tijd'] . "</p>";
+        mysqli_close($conn);
+    } else {
+        echo "<p style='color:red'>❌ Database connectie mislukt: " . mysqli_connect_error() . "</p>";
+    }
+    ?>
+    EOF
   EOT
 }
 
