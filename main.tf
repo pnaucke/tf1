@@ -158,15 +158,19 @@ locals {
     amazon-linux-extras enable php8.0
     yum install -y nginx php php-fpm php-mysqlnd mysql
 
-    systemctl start nginx
-    systemctl enable nginx
-    systemctl start php-fpm
-    systemctl enable php-fpm
-
-    # PHP-FPM configureren voor TCP
+    # PHP-FPM configureren voor TCP vóór starten
     sed -i 's/^;listen = .*/listen = 127.0.0.1:9000/' /etc/php-fpm.d/www.conf
-    systemctl restart php-fpm
-    systemctl restart nginx
+
+    # Start en enable PHP-FPM
+    systemctl enable php-fpm
+    systemctl start php-fpm
+
+    # Wacht even zodat PHP-FPM volledig opstart
+    sleep 5
+
+    # Start en enable Nginx
+    systemctl enable nginx
+    systemctl start nginx
 
     # Configureer Nginx om PHP te gebruiken
     cat > /etc/nginx/conf.d/default.conf <<'EOF'
@@ -190,7 +194,8 @@ locals {
     }
     EOF
 
-    systemctl reload nginx
+    # Herstart Nginx voor de nieuwe config
+    systemctl restart nginx
 
     # Maak test PHP pagina
     cat > /usr/share/nginx/html/index.php <<'EOF'
