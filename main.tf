@@ -42,7 +42,6 @@ resource "aws_subnet" "web2_subnet" {
   tags = { Name = "web2-subnet" }
 }
 
-# Twee DB-subnets in verschillende AZ’s (vereist voor RDS)
 resource "aws_subnet" "db_subnet1" {
   vpc_id                  = data.aws_vpc.default.id
   cidr_block              = "172.31.3.0/24"
@@ -148,81 +147,39 @@ resource "aws_db_instance" "db" {
 }
 
 # ----------------------
-# User Data (Nginx + PHP + health check)
+# User Data (Nginx + DB vars + verbeteringen)
 # ----------------------
 locals {
   user_data = <<-EOT
     #!/bin/bash
     yum update -y
     amazon-linux-extras enable nginx1
-    amazon-linux-extras enable php8.0
-    yum install -y nginx php php-fpm php-mysqlnd mysql
+    yum install -y nginx mysql
 
-    # PHP-FPM configureren voor TCP
-    echo "listen = 127.0.0.1:9000" > /etc/php-fpm.d/www.conf
-
-    # Start PHP-FPM en wacht
-    systemctl enable php-fpm
-    systemctl start php-fpm
-    sleep 10
-
-    # Start Nginx
-    systemctl enable nginx
     systemctl start nginx
+    systemctl enable nginx
 
-    # Configureer Nginx voor PHP
-    cat > /etc/nginx/conf.d/default.conf <<'EOF'
-    server {
-        listen       80 default_server;
-        server_name  _;
-        root         /usr/share/nginx/html;
-        index index.php index.html;
+    # Haal het private IP van deze webserver op
+    MY_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
 
-        location / {
-            try_files $uri $uri/ =404;
-        }
+    # Test de database verbinding
+    DB_TEST="OK"
+    mysql -h ${aws_db_instance.db.address} -uadmin -pSuperSecret123! -e "SELECT 1;" > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+      DB_TEST="FAILED"
+    fi
 
-        location ~ \.php$ {
-            include fastcgi_params;
-            fastcgi_pass 127.0.0.1:9000;
-            fastcgi_index index.php;
-            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        }
-    }
-    EOF
+    # Maak de index.html met IP en database test
+    echo "<h1>Welkom bij mijn website!</h1>" > /usr/share/nginx/html/index.html
+    echo "<p>Deze webserver IP: $MY_IP</p>" >> /usr/share/nginx/html/index.html
+    echo "<p>Database verbindingstest: $DB_TEST</p>" >> /usr/share/nginx/html/index.html
 
-    # Herstart Nginx
-    systemctl restart nginx
-
-    # Health check pagina
-    echo "OK" > /usr/share/nginx/html/health.html
-
-    # Test PHP pagina
-    cat > /usr/share/nginx/html/index.php <<'EOF'
-    <?php
-    $server_ip = $_SERVER['SERVER_ADDR'];
-
-    $db_host = getenv('DB_HOST');
-    $db_port = getenv('DB_PORT');
-    $db_user = getenv('DB_USER');
-    $db_pass = getenv('DB_PASS');
-    $db_name = getenv('DB_NAME');
-
-    echo "<h1>Webserver IP: $server_ip</h1>";
-
-    $conn = @mysqli_connect($db_host, $db_user, $db_pass, $db_name, $db_port);
-
-    if ($conn) {
-        echo "<p style='color:green'>✅ Database connectie OK</p>";
-        $res = mysqli_query($conn, "SELECT NOW() as tijd");
-        $row = mysqli_fetch_assoc($res);
-        echo "<p>Database tijd: " . $row['tijd'] . "</p>";
-        mysqli_close($conn);
-    } else {
-        echo "<p style='color:red'>❌ Database connectie mislukt: " . mysqli_connect_error() . "</p>";
-    }
-    ?>
-    EOF
+    # DB environment variabelen
+    echo "DB_HOST=${aws_db_instance.db.address}" >> /etc/environment
+    echo "DB_PORT=${aws_db_instance.db.port}" >> /etc/environment
+    echo "DB_USER=admin" >> /etc/environment
+    echo "DB_PASS=SuperSecret123!" >> /etc/environment
+    echo "DB_NAME=myappdb" >> /etc/environment
   EOT
 }
 
@@ -268,7 +225,7 @@ resource "aws_lb_target_group" "web_tg" {
   target_type = "instance"
 
   health_check {
-    path                = "/health.html"
+    path                = "/"
     protocol            = "HTTP"
     matcher             = "200"
     interval            = 30
