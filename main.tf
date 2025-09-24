@@ -148,22 +148,45 @@ resource "aws_db_instance" "db" {
 }
 
 # ----------------------
-# User Data (Nginx + DB vars)
+# User Data (Nginx + PHP test pagina)
 # ----------------------
 locals {
   user_data = <<-EOT
     #!/bin/bash
     yum update -y
     amazon-linux-extras enable nginx1
-    yum install -y nginx mysql
+    amazon-linux-extras enable php8.0
+    yum install -y nginx php php-mysqlnd mysql
+
     systemctl start nginx
     systemctl enable nginx
 
-    echo "DB_HOST=${aws_db_instance.db.address}" >> /etc/environment
-    echo "DB_PORT=${aws_db_instance.db.port}" >> /etc/environment
-    echo "DB_USER=admin" >> /etc/environment
-    echo "DB_PASS=SuperSecret123!" >> /etc/environment
-    echo "DB_NAME=myappdb" >> /etc/environment
+cat > /usr/share/nginx/html/index.php <<'EOF'
+<?php
+$server_ip = $_SERVER['SERVER_ADDR'];
+
+// Database config uit environment
+$db_host = getenv('DB_HOST');
+$db_port = getenv('DB_PORT');
+$db_user = getenv('DB_USER');
+$db_pass = getenv('DB_PASS');
+$db_name = getenv('DB_NAME');
+
+echo "<h1>Webserver IP: $server_ip</h1>";
+
+$conn = @mysqli_connect($db_host, $db_user, $db_pass, $db_name, $db_port);
+
+if ($conn) {
+    echo "<p style='color:green'>✅ Database connectie OK</p>";
+    $res = mysqli_query($conn, "SELECT NOW() as tijd");
+    $row = mysqli_fetch_assoc($res);
+    echo "<p>Database tijd: " . $row['tijd'] . "</p>";
+    mysqli_close($conn);
+} else {
+    echo "<p style='color:red'>❌ Database connectie mislukt: " . mysqli_connect_error() . "</p>";
+}
+?>
+EOF
   EOT
 }
 
