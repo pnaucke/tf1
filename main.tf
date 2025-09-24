@@ -163,6 +163,11 @@ locals {
     systemctl start php-fpm
     systemctl enable php-fpm
 
+    # PHP-FPM configureren voor TCP
+    sed -i 's/^;listen = .*/listen = 127.0.0.1:9000/' /etc/php-fpm.d/www.conf
+    systemctl restart php-fpm
+    systemctl restart nginx
+
     # Configureer Nginx om PHP te gebruiken
     cat > /etc/nginx/conf.d/default.conf <<'EOF'
     server {
