@@ -147,7 +147,7 @@ resource "aws_db_instance" "db" {
 }
 
 # ----------------------
-# User Data (Nginx + DB vars + Node Exporter)
+# User Data (Nginx + DB vars + verbeteringen)
 # ----------------------
 locals {
   user_data = <<-EOT
@@ -180,31 +180,6 @@ locals {
     echo "DB_USER=admin" >> /etc/environment
     echo "DB_PASS=SuperSecret123!" >> /etc/environment
     echo "DB_NAME=myappdb" >> /etc/environment
-
-    # --- Node Exporter installatie ---
-    NODE_VER="1.6.1"
-    cd /tmp
-    curl -sSL "https://github.com/prometheus/node_exporter/releases/download/v${NODE_VER}/node_exporter-${NODE_VER}.linux-amd64.tar.gz" -o node_exporter.tar.gz
-    tar xzf node_exporter.tar.gz
-    cp node_exporter-${NODE_VER}.linux-amd64/node_exporter /usr/local/bin/
-    useradd --no-create-home --shell /bin/false nodeusr || true
-
-    cat > /etc/systemd/system/node_exporter.service <<'EOF'
-    [Unit]
-    Description=Node Exporter
-    Wants=network-online.target
-    After=network-online.target
-
-    [Service]
-    User=nodeusr
-    ExecStart=/usr/local/bin/node_exporter
-
-    [Install]
-    WantedBy=multi-user.target
-    EOF
-
-    systemctl daemon-reload
-    systemctl enable --now node_exporter
   EOT
 }
 
