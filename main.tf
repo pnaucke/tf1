@@ -44,7 +44,7 @@ resource "aws_subnet" "web2_subnet" {
 
 resource "aws_subnet" "db_subnet1" {
   vpc_id                  = data.aws_vpc.default.id
-  cidr_block              = "172.31.3.0/24"
+  cidr_block              = "172.31.10.0/24"
   availability_zone       = "eu-central-1b"
   map_public_ip_on_launch = false
   tags = { Name = "db-subnet-1" }
@@ -52,7 +52,7 @@ resource "aws_subnet" "db_subnet1" {
 
 resource "aws_subnet" "db_subnet2" {
   vpc_id                  = data.aws_vpc.default.id
-  cidr_block              = "172.31.4.0/24"
+  cidr_block              = "172.31.11.0/24"
   availability_zone       = "eu-central-1c"
   map_public_ip_on_launch = false
   tags = { Name = "db-subnet-2" }
@@ -192,24 +192,29 @@ locals {
     systemctl start nginx
     systemctl enable nginx
 
+    # Haal het private IP van deze webserver op
     MY_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
 
+    # Test de database verbinding
     DB_TEST="OK"
     mysql -h ${aws_db_instance.db.address} -uadmin -pSuperSecret123! -e "SELECT 1;" > /dev/null 2>&1
     if [ $? -ne 0 ]; then
       DB_TEST="FAILED"
     fi
 
+    # Maak de index.html met IP en database test
     echo "<h1>Welkom bij mijn website!</h1>" > /usr/share/nginx/html/index.html
     echo "<p>Deze webserver IP: $MY_IP</p>" >> /usr/share/nginx/html/index.html
     echo "<p>Database verbindingstest: $DB_TEST</p>" >> /usr/share/nginx/html/index.html
 
+    # DB environment variabelen
     echo "DB_HOST=${aws_db_instance.db.address}" >> /etc/environment
     echo "DB_PORT=${aws_db_instance.db.port}" >> /etc/environment
     echo "DB_USER=admin" >> /etc/environment
     echo "DB_PASS=SuperSecret123!" >> /etc/environment
     echo "DB_NAME=myappdb" >> /etc/environment
 
+    # Prometheus Node Exporter installatie
     useradd --no-create-home --shell /bin/false node_exporter
     wget https://github.com/prometheus/node_exporter/releases/download/v1.7.1/node_exporter-1.7.1.linux-amd64.tar.gz
     tar xvfz node_exporter-1.7.1.linux-amd64.tar.gz
@@ -231,6 +236,16 @@ locals {
 
     systemctl daemon-reload
     systemctl enable --now node_exporter
+  EOT
+
+  grafana_user_data = <<-EOT
+    #!/bin/bash
+    yum update -y
+    wget https://dl.grafana.com/oss/release/grafana-10.4.2-1.x86_64.rpm
+    yum install -y ./grafana-10.4.2-1.x86_64.rpm
+
+    systemctl enable grafana-server
+    systemctl start grafana-server
   EOT
 }
 
@@ -260,17 +275,6 @@ resource "aws_instance" "web2" {
 # ----------------------
 # Grafana instance
 # ----------------------
-locals {
-  grafana_user_data = <<-EOT
-    #!/bin/bash
-    yum update -y
-    amazon-linux-extras install -y grafana
-
-    systemctl enable grafana-server
-    systemctl start grafana-server
-  EOT
-}
-
 resource "aws_instance" "grafana" {
   ami                    = data.aws_ami.amazon_linux.id
   instance_type          = "t2.micro"
@@ -347,7 +351,3 @@ output "db_endpoint" {
 output "grafana_public_ip" {
   value = aws_instance.grafana.public_ip
 }
-
-# ----------------------
-# Feest
-# ----------------------
