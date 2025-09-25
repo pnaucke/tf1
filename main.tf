@@ -95,13 +95,6 @@ resource "aws_security_group" "web_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  ingress {
-    from_port   = 9100
-    to_port     = 9100
-    protocol    = "tcp"
-    security_groups = [aws_security_group.grafana_sg.id]
-  }
-
   egress {
     from_port   = 0
     to_port     = 0
