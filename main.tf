@@ -95,6 +95,13 @@ resource "aws_security_group" "web_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  ingress {
+    from_port   = 9100
+    to_port     = 9100
+    protocol    = "tcp"
+    security_groups = [aws_security_group.grafana_sg.id]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -110,6 +117,39 @@ resource "aws_security_group" "db_sg" {
   ingress {
     from_port       = 3306
     to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.web_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "grafana_sg" {
+  name   = "grafana-sg"
+  vpc_id = data.aws_vpc.default.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["<jouw-ip>/32"]
+  }
+
+  ingress {
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = ["<jouw-ip>/32"]
+  }
+
+  ingress {
+    from_port       = 9100
+    to_port         = 9100
     protocol        = "tcp"
     security_groups = [aws_security_group.web_sg.id]
   }
@@ -147,14 +187,14 @@ resource "aws_db_instance" "db" {
 }
 
 # ----------------------
-# User Data (Nginx + DB vars + verbeteringen)
+# User Data (Nginx + DB vars + Prometheus)
 # ----------------------
 locals {
   user_data = <<-EOT
     #!/bin/bash
     yum update -y
     amazon-linux-extras enable nginx1
-    yum install -y nginx mysql
+    yum install -y nginx mysql wget tar
 
     systemctl start nginx
     systemctl enable nginx
@@ -180,6 +220,29 @@ locals {
     echo "DB_USER=admin" >> /etc/environment
     echo "DB_PASS=SuperSecret123!" >> /etc/environment
     echo "DB_NAME=myappdb" >> /etc/environment
+
+    # Prometheus Node Exporter installatie
+    useradd --no-create-home --shell /bin/false node_exporter
+    wget https://github.com/prometheus/node_exporter/releases/download/v1.7.1/node_exporter-1.7.1.linux-amd64.tar.gz
+    tar xvfz node_exporter-1.7.1.linux-amd64.tar.gz
+    cp node_exporter-1.7.1.linux-amd64/node_exporter /usr/local/bin/
+    chown node_exporter:node_exporter /usr/local/bin/node_exporter
+
+    cat <<EOF >/etc/systemd/system/node_exporter.service
+    [Unit]
+    Description=Node Exporter
+    After=network.target
+
+    [Service]
+    User=node_exporter
+    ExecStart=/usr/local/bin/node_exporter
+
+    [Install]
+    WantedBy=default.target
+    EOF
+
+    systemctl daemon-reload
+    systemctl enable --now node_exporter
   EOT
 }
 
@@ -204,6 +267,18 @@ resource "aws_instance" "web2" {
   key_name               = "Project1"
   user_data              = local.user_data
   tags = { Name = "web2" }
+}
+
+# ----------------------
+# Grafana instance
+# ----------------------
+resource "aws_instance" "grafana" {
+  ami                    = data.aws_ami.amazon_linux.id
+  instance_type          = "t2.micro"
+  subnet_id              = aws_subnet.web1_subnet.id
+  vpc_security_group_ids = [aws_security_group.grafana_sg.id]
+  key_name               = "Project1"
+  tags = { Name = "grafana" }
 }
 
 # ----------------------
@@ -269,6 +344,6 @@ output "db_endpoint" {
   value = aws_db_instance.db.address
 }
 
-# ----------------------
-# feest
-# ----------------------
+output "grafana_public_ip" {
+  value = aws_instance.grafana.public_ip
+}
