@@ -130,14 +130,14 @@ resource "aws_security_group" "grafana_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["<jouw-ip>/32"]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
-    cidr_blocks = ["<jouw-ip>/32"]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
