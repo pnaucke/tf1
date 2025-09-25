@@ -141,6 +141,13 @@ resource "aws_security_group" "grafana_sg" {
   }
 
   ingress {
+    from_port   = 9090
+    to_port     = 9090
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
     from_port       = 9100
     to_port         = 9100
     protocol        = "tcp"
@@ -180,7 +187,7 @@ resource "aws_db_instance" "db" {
 }
 
 # ----------------------
-# User Data (Nginx + DB vars + Prometheus)
+# User Data (Nginx + DB vars + Prometheus Node Exporter)
 # ----------------------
 locals {
   user_data = <<-EOT
@@ -192,29 +199,25 @@ locals {
     systemctl start nginx
     systemctl enable nginx
 
-    # Haal het private IP van deze webserver op
     MY_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
 
-    # Test de database verbinding
     DB_TEST="OK"
     mysql -h ${aws_db_instance.db.address} -uadmin -pSuperSecret123! -e "SELECT 1;" > /dev/null 2>&1
     if [ $? -ne 0 ]; then
       DB_TEST="FAILED"
     fi
 
-    # Maak de index.html met IP en database test
     echo "<h1>Welkom bij mijn website!</h1>" > /usr/share/nginx/html/index.html
     echo "<p>Deze webserver IP: $MY_IP</p>" >> /usr/share/nginx/html/index.html
     echo "<p>Database verbindingstest: $DB_TEST</p>" >> /usr/share/nginx/html/index.html
 
-    # DB environment variabelen
     echo "DB_HOST=${aws_db_instance.db.address}" >> /etc/environment
     echo "DB_PORT=${aws_db_instance.db.port}" >> /etc/environment
     echo "DB_USER=admin" >> /etc/environment
     echo "DB_PASS=SuperSecret123!" >> /etc/environment
     echo "DB_NAME=myappdb" >> /etc/environment
 
-    # Prometheus Node Exporter installatie
+    # Node Exporter
     useradd --no-create-home --shell /bin/false node_exporter
     wget https://github.com/prometheus/node_exporter/releases/download/v1.7.1/node_exporter-1.7.1.linux-amd64.tar.gz
     tar xvfz node_exporter-1.7.1.linux-amd64.tar.gz
@@ -236,16 +239,6 @@ locals {
 
     systemctl daemon-reload
     systemctl enable --now node_exporter
-  EOT
-
-  grafana_user_data = <<-EOT
-    #!/bin/bash
-    yum update -y
-    wget https://dl.grafana.com/oss/release/grafana-10.4.2-1.x86_64.rpm
-    yum install -y ./grafana-10.4.2-1.x86_64.rpm
-
-    systemctl enable grafana-server
-    systemctl start grafana-server
   EOT
 }
 
@@ -273,8 +266,73 @@ resource "aws_instance" "web2" {
 }
 
 # ----------------------
-# Grafana instance
+# Grafana + Prometheus instance
 # ----------------------
+locals {
+  grafana_user_data = <<-EOT
+    #!/bin/bash
+    yum update -y
+    yum install -y wget tar
+
+    # Install Grafana
+    cat <<EOF > /etc/yum.repos.d/grafana.repo
+    [grafana]
+    name=grafana
+    baseurl=https://packages.grafana.com/oss/rpm
+    repo_gpgcheck=1
+    enabled=1
+    gpgcheck=1
+    gpgkey=https://packages.grafana.com/gpg.key
+    EOF
+
+    yum install -y grafana
+    systemctl enable grafana-server
+    systemctl start grafana-server
+
+    # Install Prometheus
+    cd /tmp
+    wget https://github.com/prometheus/prometheus/releases/download/v2.47.0/prometheus-2.47.0.linux-amd64.tar.gz
+    tar xvf prometheus-2.47.0.linux-amd64.tar.gz
+    cd prometheus-2.47.0.linux-amd64
+
+    mkdir -p /etc/prometheus
+    cat <<EOF >/etc/prometheus/prometheus.yml
+    global:
+      scrape_interval: 15s
+
+    scrape_configs:
+      - job_name: 'node_exporter'
+        static_configs:
+          - targets: ['${aws_instance.web1.private_ip}:9100','${aws_instance.web2.private_ip}:9100']
+    EOF
+
+    cp prometheus /usr/local/bin/
+    cp promtool /usr/local/bin/
+
+    cat <<EOF >/etc/systemd/system/prometheus.service
+    [Unit]
+    Description=Prometheus
+    Wants=network-online.target
+    After=network-online.target
+
+    [Service]
+    ExecStart=/usr/local/bin/prometheus \\
+      --config.file=/etc/prometheus/prometheus.yml \\
+      --storage.tsdb.path=/var/lib/prometheus/ \\
+      --web.listen-address=:9090 \\
+      --web.enable-lifecycle
+    Restart=always
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+
+    mkdir -p /var/lib/prometheus
+    systemctl daemon-reload
+    systemctl enable --now prometheus
+  EOT
+}
+
 resource "aws_instance" "grafana" {
   ami                    = data.aws_ami.amazon_linux.id
   instance_type          = "t2.micro"
